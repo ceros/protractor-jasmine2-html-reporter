@@ -321,6 +321,15 @@ function Jasmine2HTMLReporter(options) {
         var errors = [];
         var path = self.savePath;
 
+        function appendwrite(path, filename, text){
+            var fs = require("fs");
+            var nodejs_path = require("path");
+            require("mkdirp").sync(path); // make sure the path exists
+            var filepath = nodejs_path.join(path, filename);
+            fs.appendFileSync(filepath,text);
+            return;
+        }
+
         function phantomWrite(path, filename, text) {
             // turn filename into a qualified path
             filename = getQualifiedFilename(path, filename, window.fs_path_separator);
@@ -341,7 +350,8 @@ function Jasmine2HTMLReporter(options) {
         // Attempt writing with each possible environment.
         // Track errors in case no write succeeds
         try {
-            phantomWrite(path, filename, text);
+            // append instead of overwrite, so sharding works!
+            appendwrite(path, filename, text);
             return;
         } catch (e) { errors.push('  PhantomJs attempt: ' + e.message); }
         try {
