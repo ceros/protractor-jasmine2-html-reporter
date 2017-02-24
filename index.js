@@ -19,7 +19,7 @@ function isSkipped(obj) { return obj.status === "pending"; }
 function isDisabled(obj) { return obj.status === "disabled"; }
 function parseDecimalRoundAndFixed(num,dec){
     var d =  Math.pow(10,dec);
-    return (Math.round(num * d) / d).toFixed(dec);
+    return isNaN((Math.round(num * d) / d).toFixed(dec)) === true ? 0 : (Math.round(num * d) / d).toFixed(dec);
 }
 function extend(dupe, obj) { // performs a shallow copy of all props of `obj` onto `dupe`
     for (var prop in obj) {
