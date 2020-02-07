@@ -107,8 +107,10 @@ function Jasmine2HTMLReporter(options) {
     self.fileName = options.fileName === UNDEFINED ? 'htmlReport' : options.fileName;
     self.cleanDestination = options.cleanDestination === UNDEFINED ? true : options.cleanDestination;
     self.showPassed = options.showPassed === UNDEFINED ? true : options.showPassed;
+    self.showFailuresOnly = options.showFailuresOnly === UNDEFINED ? true : options.showFailuresOnly;
 
     var suites = [],
+        flakes = [],
         currentSuite = null,
         totalSpecsExecuted = 0,
         totalSpecsDefined,
@@ -131,7 +133,6 @@ function Jasmine2HTMLReporter(options) {
 
     function getReportFilename(specName){
         var name = '';
-        console.log(self.fileNamePrefix);
         if (self.fileNamePrefix)
             name += self.fileNamePrefix + self.fileNameSeparator;
 
@@ -147,6 +148,24 @@ function Jasmine2HTMLReporter(options) {
             name += self.fileNameSeparator + getReportDate();
 
         return name;
+    }
+
+    /**
+     * Remove all passed specs from a suite.
+     * @param {object} suite - a suite object
+     */
+    function filterOutPassedSpecs(suite) {
+        for (var i = 0; i < suite._specs.length; i++) {
+            if ( !(isFailed(suite._specs[i])) ) {
+                suite._specs.splice(i, 1);
+            }
+        }
+
+        for (var i = 0; i < suite._suites.length; i++) {
+            filterOutPassedSpecs(suite._suites[i]);
+        }
+
+        return suite;
     }
 
     self.jasmineStarted = function(summary) {
@@ -226,12 +245,19 @@ function Jasmine2HTMLReporter(options) {
     };
     self.suiteDone = function(suite) {
         suite = getSuite(suite);
+
         if (suite._parent === UNDEFINED) {
             // disabled suite (xdescribe) -- suiteStarted was never called
             self.suiteStarted(suite);
         }
         suite._endTime = new Date();
         currentSuite = suite._parent;
+
+        if (suite._failures > 0) {
+            suiteCopy = Object.assign({}, suite);
+            suiteCopy = filterOutPassedSpecs(suiteCopy);
+            flakes.push(suiteCopy);
+        }
     };
 
     self.jasmineDone = function() {
@@ -240,9 +266,11 @@ function Jasmine2HTMLReporter(options) {
             self.suiteDone(fakeFocusedSuite);
         }
 
+        var outputSuites = self.showFailuresOnly ? flakes : suites;
+
         var output = '';
-        for (var i = 0; i < suites.length; i++) {
-            output += self.getOrWriteNestedOutput(suites[i]);
+        for (var i = 0; i < outputSuites.length; i++) {
+            output += self.getOrWriteNestedOutput(outputSuites[i]);
         }
         // if we have anything to write here, write out the consolidated file
         if (output) {
