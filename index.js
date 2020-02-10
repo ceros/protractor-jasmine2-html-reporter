@@ -109,7 +109,7 @@ function Jasmine2HTMLReporter(options) {
     self.fileName = options.fileName === UNDEFINED ? 'htmlReport' : options.fileName;
     self.cleanDestination = options.cleanDestination === UNDEFINED ? true : options.cleanDestination;
     self.showPassed = options.showPassed === UNDEFINED ? true : options.showPassed;
-    self.showFailuresOnly = options.showFailuresOnly === UNDEFINED ? true : options.showFailuresOnly;
+    self.showFailuresOnly = options.showFailuresOnly === UNDEFINED ? false : options.showFailuresOnly;
 
     var suites = [],
         flakes = [],
