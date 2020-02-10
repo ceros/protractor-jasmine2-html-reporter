@@ -113,7 +113,7 @@ function Jasmine2HTMLReporter(options) {
 
     var suites = [],
         flakes = [],
-        flakedSuiteNames = [];
+        flakedSuiteNames = {},
         currentSuite = null,
         totalSpecsExecuted = 0,
         totalSpecsDefined,
@@ -172,11 +172,23 @@ function Jasmine2HTMLReporter(options) {
     }
 
     function saveFlakedSuiteNames() {
-        storage.setItem('flakedSuiteNames', flakedSuiteNames);
+        if (Object.keys(flakedSuiteNames).length === 0)
+            return
+
+        var storedNames = loadFlakedSuiteNames();
+        namesToBeStored = Object.assign(storedNames, flakedSuiteNames);
+
+        storage.setItem('flakedSuiteNames', JSON.stringify(namesToBeStored));
     }
 
     function loadFlakedSuiteNames() {
-        return flakedSuiteNames = storage.getItem('flakedSuiteNames');
+        var storedSuiteNames = storage.getItem('flakedSuiteNames') || {};
+
+        if (typeof storedSuiteNames === 'string') {
+            return JSON.parse(storedSuiteNames);
+        }
+
+        return storedSuiteNames;
     }
 
     function isFlakeySuite(suite) {
@@ -186,7 +198,7 @@ function Jasmine2HTMLReporter(options) {
     function isFlakedSuiteRerun(suite) {
         var suiteName = getFullyQualifiedSuiteName(suite);
 
-        if (flakedSuiteNames.indexOf(suiteName) > -1) {
+        if (flakedSuiteNames[suiteName]) {
             return true
         }
 
@@ -198,14 +210,14 @@ function Jasmine2HTMLReporter(options) {
 
         if(!isFlakedSuiteRerun(suite)) {
             suiteCopy = filterOutPassedSpecs(suiteCopy);
-            flakedSuiteNames.push(getFullyQualifiedSuiteName(suite));
+            flakedSuiteNames[getFullyQualifiedSuiteName(suite)] = true;
         }
 
         flakes.push(suiteCopy);
     }
 
     self.jasmineStarted = function (summary) {
-        loadFlakedSuiteNames();
+        flakedSuiteNames = loadFlakedSuiteNames();
 
         totalSpecsDefined = summary && summary.totalSpecsDefined || NaN;
         exportObject.startTime = new Date();
@@ -278,8 +290,6 @@ function Jasmine2HTMLReporter(options) {
                 });
             });
         }
-
-
     };
     self.suiteDone = function (suite) {
         suite = getSuite(suite);
@@ -301,7 +311,6 @@ function Jasmine2HTMLReporter(options) {
             // focused spec (fit) -- suiteDone was never called
             self.suiteDone(fakeFocusedSuite);
         }
-
         // add suite names to storage for to be loaded in the next jasmine run.
         saveFlakedSuiteNames();
 
