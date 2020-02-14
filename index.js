@@ -20,6 +20,7 @@ function elapsed(start, end) { return (end - start) / 1000; }
 function isFailed(obj) { return obj.status === "failed"; }
 function isSkipped(obj) { return obj.status === "pending"; }
 function isDisabled(obj) { return obj.status === "disabled"; }
+function isPassed(obj) { return obj.status === "passed"; }
 function parseDecimalRoundAndFixed(num, dec) {
     var d = Math.pow(10, dec);
     return isNaN((Math.round(num * d) / d).toFixed(dec)) === true ? 0 : (Math.round(num * d) / d).toFixed(dec);
@@ -158,11 +159,11 @@ function Jasmine2HTMLReporter(options) {
      * @param {object} suite - a suite object
      */
     function filterOutPassedSpecs(suite) {
-        for (var i = 0; i < suite._specs.length; i++) {
-            if (!(isFailed(suite._specs[i]))) {
-                suite._specs.splice(i, 1);
-            }
-        }
+        var suiteName = getFullyQualifiedSuiteName(suite);
+
+        suite._specs = suite._specs.filter((spec) => {
+            return !isPassed(spec) || (flakedSuiteNames[suiteName] || []).indexOf(spec.id) > -1;
+        });
 
         for (var i = 0; i < suite._suites.length; i++) {
             filterOutPassedSpecs(suite._suites[i]);
@@ -198,7 +199,7 @@ function Jasmine2HTMLReporter(options) {
     function isFlakedSuiteRerun(suite) {
         var suiteName = getFullyQualifiedSuiteName(suite);
 
-        if (flakedSuiteNames[suiteName]) {
+        if (flakedSuiteNames[suiteName] && flakedSuiteNames[suiteName].length > 0) {
             return true
         }
 
@@ -209,9 +210,13 @@ function Jasmine2HTMLReporter(options) {
         var suiteCopy = Object.assign({}, suite);
 
         if(!isFlakedSuiteRerun(suite)) {
-            suiteCopy = filterOutPassedSpecs(suiteCopy);
-            flakedSuiteNames[getFullyQualifiedSuiteName(suite)] = true;
+            let failedSpecIds = suiteCopy._specs
+                .filter((spec) => !isPassed(spec))
+                .map((spec) => spec.id);
+            flakedSuiteNames[getFullyQualifiedSuiteName(suite)] = failedSpecIds;
         }
+
+        suiteCopy = filterOutPassedSpecs(suiteCopy);
 
         flakes.push(suiteCopy);
     }
