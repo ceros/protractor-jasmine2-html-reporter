@@ -165,10 +165,6 @@ function Jasmine2HTMLReporter(options) {
             return !isPassed(spec) || (flakedSuiteNames[suiteName] || []).indexOf(spec.id) > -1;
         });
 
-        for (var i = 0; i < suite._suites.length; i++) {
-            filterOutPassedSpecs(suite._suites[i]);
-        }
-
         return suite;
     }
 
@@ -208,6 +204,7 @@ function Jasmine2HTMLReporter(options) {
 
     function appendFlakeySuite(suite) {
         var suiteCopy = Object.assign({}, suite);
+        suiteCopy._suites = [];
 
         if(!isFlakedSuiteRerun(suite)) {
             let failedSpecIds = suiteCopy._specs
