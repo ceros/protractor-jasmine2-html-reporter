@@ -135,6 +135,18 @@ This option, if false, will show only failures.
 
 Default is <code>true</code>
 
+### showFailuresOnly (optional)
+This option if true will hide all passed tests and only display the failures.
+
+<pre><code>jasmine.getEnv().addReporter(new Jasmine2HtmlReporter({
+   ....
+   showFailuresOnly: true
+}));</code></pre>
+
+Default is <code>false</code>
+
+*NB* If you are using protractor flake, this will show passed tests if they passed on the second run but failed on the first.
+
 ### fileName (optional)
 
 This will be the name used for the html file generated thanks to this tool.
