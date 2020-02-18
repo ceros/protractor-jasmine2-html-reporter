@@ -8,7 +8,6 @@ var fs = require('fs'),
 
 require('string.prototype.startswith');
 
-var storage = new LocalStorage('./scratch');
 var UNDEFINED, exportObject = exports, reportDate;
 
 function sanitizeFilename(name) {
@@ -124,6 +123,9 @@ function Jasmine2HTMLReporter(options) {
             description: 'focused specs',
             fullName: 'focused specs'
         };
+    
+    var storage = new LocalStorage(self.savePath + 'temp');
+    var storageUID = getReportFilename();
 
     var __suites = {}, __specs = {};
     function getSuite(suite) {
@@ -175,11 +177,11 @@ function Jasmine2HTMLReporter(options) {
         var storedNames = loadFlakedSuiteNames();
         namesToBeStored = Object.assign(storedNames, flakedSuiteNames);
 
-        storage.setItem('flakedSuiteNames', JSON.stringify(namesToBeStored));
+        storage.setItem(storageUID, JSON.stringify(namesToBeStored));
     }
 
     function loadFlakedSuiteNames() {
-        var storedSuiteNames = storage.getItem('flakedSuiteNames') || {};
+        var storedSuiteNames = storage.getItem(storageUID) || {};
 
         if (typeof storedSuiteNames === 'string') {
             return JSON.parse(storedSuiteNames);
