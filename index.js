@@ -124,6 +124,7 @@ function Jasmine2HTMLReporter(options) {
             fullName: 'focused specs'
         };
     
+    // use node-localstorage to persist suite names to determine flake
     var storage = new LocalStorage(self.savePath + 'temp');
     var storageUID = getReportFilename();
 
@@ -157,7 +158,8 @@ function Jasmine2HTMLReporter(options) {
     }
 
     /**
-     * Remove all passed specs from a suite.
+     * Remove passed specs but keep specs that failed on first run
+     * but passed on second.
      * @param {object} suite - a suite object
      */
     function filterOutPassedSpecs(suite) {
@@ -170,6 +172,9 @@ function Jasmine2HTMLReporter(options) {
         return suite;
     }
 
+    /**
+     * Persist failed suite names to node local storage
+     */
     function saveFlakedSuiteNames() {
         if (Object.keys(flakedSuiteNames).length === 0)
             return
@@ -180,6 +185,10 @@ function Jasmine2HTMLReporter(options) {
         storage.setItem(storageUID, JSON.stringify(namesToBeStored));
     }
 
+    /**
+     * Retrieve flaked suite names from node local storage to determine if current
+     * run is a rerun.
+     */
     function loadFlakedSuiteNames() {
         var storedSuiteNames = storage.getItem(storageUID) || {};
 
@@ -189,11 +198,20 @@ function Jasmine2HTMLReporter(options) {
 
         return storedSuiteNames;
     }
-
+    
+    /**
+     * Check if a suite has failing specs.
+     * @param {object} suite - suite object
+     */
     function isFlakeySuite(suite) {
         return suite._failures > 0;
     }
 
+    /**
+     * Check if a suite is a rerun (failed initially and is being run a second time)
+     * @param {object} suite - suite object
+     * @return {boolean}
+     */
     function isFlakedSuiteRerun(suite) {
         var suiteName = getFullyQualifiedSuiteName(suite);
 
@@ -204,10 +222,15 @@ function Jasmine2HTMLReporter(options) {
         return false;
     }
 
+    /**
+     * Append a flakey suite to displayed suites.
+     * @param {suite} suite - suite object
+     */
     function appendFlakeySuite(suite) {
         var suiteCopy = Object.assign({}, suite);
         suiteCopy._suites = [];
 
+        // if it is suite's first run remove all passed specs and save failing specs.
         if(!isFlakedSuiteRerun(suite)) {
             let failedSpecIds = suiteCopy._specs
                 .filter((spec) => !isPassed(spec))
