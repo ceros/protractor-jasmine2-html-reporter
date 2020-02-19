@@ -72,8 +72,10 @@ function rmdir(dir) {
 }
 
 function getReportDate() {
-    if (reportDate === undefined)
+    if (_.isUndefined(reportDate)) {
         reportDate = new Date();
+    }
+
     return reportDate.getFullYear() + '' +
         (reportDate.getMonth() + 1) +
         reportDate.getDate() + ' ' +
@@ -140,19 +142,23 @@ function Jasmine2HTMLReporter(options) {
 
     function getReportFilename(specName) {
         var name = '';
-        if (self.fileNamePrefix)
+        if (self.fileNamePrefix) {
             name += self.fileNamePrefix + self.fileNameSeparator;
+        }
 
         name += self.fileName;
 
-        if (specName !== undefined)
+        if (_.isUndefined(specName)) {
             name += self.fileNameSeparator + specName;
+        }
 
-        if (self.fileNameSuffix)
+        if (self.fileNameSuffix) {
             name += self.fileNameSeparator + self.fileNameSuffix;
+        }
 
-        if (self.fileNameDateSuffix)
+        if (self.fileNameDateSuffix) {
             name += self.fileNameSeparator + getReportDate();
+        }
 
         return name;
     }
@@ -176,8 +182,9 @@ function Jasmine2HTMLReporter(options) {
      * Persist failed suite names to node local storage
      */
     function saveFlakedSuiteNames() {
-        if (Object.keys(flakedSuiteNames).length === 0)
-            return
+        if (_.isEmpty(Object.keys(flakedSuiteNames))) {
+            return;
+        }
 
         var storedNames = loadFlakedSuiteNames();
         namesToBeStored = Object.assign(storedNames, flakedSuiteNames);
@@ -192,8 +199,12 @@ function Jasmine2HTMLReporter(options) {
     function loadFlakedSuiteNames() {
         var storedSuiteNames = storage.getItem(storageUID) || {};
 
-        if (typeof storedSuiteNames === 'string') {
-            return JSON.parse(storedSuiteNames);
+        if (_.isString(storedSuiteNames)) {
+            try {
+                return JSON.parse(storedSuiteNames);
+            } catch (error) {
+                log('Error retrieving flaked suite names', error);
+            }
         }
 
         return storedSuiteNames;
@@ -216,7 +227,7 @@ function Jasmine2HTMLReporter(options) {
         var suiteName = getFullyQualifiedSuiteName(suite);
 
         if (flakedSuiteNames[suiteName] && flakedSuiteNames[suiteName].length > 0) {
-            return true
+            return true;
         }
 
         return false;
