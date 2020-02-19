@@ -207,7 +207,7 @@ function Jasmine2HTMLReporter(options) {
             }
         }
 
-        return storedSuiteNames;
+        return {};
     }
     
     /**
@@ -241,7 +241,7 @@ function Jasmine2HTMLReporter(options) {
         var suiteCopy = Object.assign({}, suite);
         suiteCopy._suites = [];
 
-        // if it is suite's first run remove all passed specs and save failing specs.
+        // if it is suite's first run remove all passed specs and save failing spec ids.
         if(!isFlakedSuiteRerun(suite)) {
             let failedSpecIds = suiteCopy._specs
                 .filter((spec) => !isPassed(spec))
