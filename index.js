@@ -266,9 +266,9 @@ function Jasmine2HTMLReporter(options) {
             rmdir(self.savePath);
         }
         //Delete previous reports unless cleanDirectory is false
-        if (self.cleanDestination)
+        if (self.cleanDestination) {
             rmdir(self.savePath);
-
+        }
     };
     self.suiteStarted = function (suite) {
         suite = getSuite(suite);
