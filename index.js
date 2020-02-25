@@ -1,24 +1,27 @@
-var fs     = require('fs'),
+var fs = require('fs'),
     mkdirp = require('mkdirp'),
-    _      = require('lodash'),
-    path   = require('path'),
-    hat    = require('hat');
+    _ = require('lodash'),
+    path = require('path'),
+    async = require('async'),
+    hat = require('hat'),
+    LocalStorage = require('node-localstorage').LocalStorage;
 
 require('string.prototype.startswith');
 
-var UNDEFINED, exportObject = exports;
+var UNDEFINED, exportObject = exports, reportDate;
 
-function sanitizeFilename(name){
+function sanitizeFilename(name) {
     name = name.replace(/\s+/gi, '-'); // Replace white space with dash
     return name.replace(/[^a-zA-Z0-9\-]/gi, ''); // Strip any special charactere
 }
-function trim(str) { return str.replace(/^\s+/, "" ).replace(/\s+$/, "" ); }
-function elapsed(start, end) { return (end - start)/1000; }
+function trim(str) { return str.replace(/^\s+/, "").replace(/\s+$/, ""); }
+function elapsed(start, end) { return (end - start) / 1000; }
 function isFailed(obj) { return obj.status === "failed"; }
 function isSkipped(obj) { return obj.status === "pending"; }
 function isDisabled(obj) { return obj.status === "disabled"; }
-function parseDecimalRoundAndFixed(num,dec){
-    var d =  Math.pow(10,dec);
+function isPassed(obj) { return obj.status === "passed"; }
+function parseDecimalRoundAndFixed(num, dec) {
+    var d = Math.pow(10, dec);
     return isNaN((Math.round(num * d) / d).toFixed(dec)) === true ? 0 : (Math.round(num * d) / d).toFixed(dec);
 }
 function extend(dupe, obj) { // performs a shallow copy of all props of `obj` onto `dupe`
@@ -65,8 +68,23 @@ function rmdir(dir) {
             }
         }
         fs.rmdirSync(dir);
-    }catch (e) { log("problem trying to remove a folder:" + dir); }
+    } catch (e) { log("problem trying to remove a folder:" + dir); }
 }
+
+function getReportDate() {
+    if (_.isUndefined(reportDate)) {
+        reportDate = new Date();
+    }
+
+    return reportDate.getFullYear() + '' +
+        (reportDate.getMonth() + 1) +
+        reportDate.getDate() + ' ' +
+        reportDate.getHours() + '' +
+        reportDate.getMinutes() + '' +
+        reportDate.getSeconds() + ',' +
+        reportDate.getMilliseconds();
+}
+
 
 function Jasmine2HTMLReporter(options) {
 
@@ -86,8 +104,18 @@ function Jasmine2HTMLReporter(options) {
     self.consolidateAll = self.consolidate !== false && (options.consolidateAll === UNDEFINED ? true : options.consolidateAll);
     self.filePrefix = options.filePrefix || (self.consolidateAll ? 'htmlReport' : 'htmlReport-');
     self.retainScreenshots = options.retainScreenshots === UNDEFINED ? false : options.retainScreenshots;
+    self.fileNameSeparator = options.fileNameSeparator === UNDEFINED ? '-' : options.fileNameSeparator;
+    self.fileNamePrefix = options.fileNamePrefix === UNDEFINED ? '' : options.fileNamePrefix;
+    self.fileNameSuffix = options.fileNameSuffix === UNDEFINED ? '' : options.fileNameSuffix;
+    self.fileNameDateSuffix = options.fileNameDateSuffix === UNDEFINED ? false : options.fileNameDateSuffix;
+    self.fileName = options.fileName === UNDEFINED ? 'htmlReport' : options.fileName;
+    self.cleanDestination = options.cleanDestination === UNDEFINED ? true : options.cleanDestination;
+    self.showPassed = options.showPassed === UNDEFINED ? true : options.showPassed;
+    self.showFailuresOnly = options.showFailuresOnly === UNDEFINED ? false : options.showFailuresOnly;
 
     var suites = [],
+        flakes = [],
+        flakedSuiteNames = {},
         currentSuite = null,
         totalSpecsExecuted = 0,
         totalSpecsDefined,
@@ -97,6 +125,10 @@ function Jasmine2HTMLReporter(options) {
             description: 'focused specs',
             fullName: 'focused specs'
         };
+    
+    // use node-localstorage to persist suite names to determine flake
+    var storage = new LocalStorage(self.savePath + 'temp');
+    var storageUID = getReportFilename();
 
     var __suites = {}, __specs = {};
     function getSuite(suite) {
@@ -108,7 +140,123 @@ function Jasmine2HTMLReporter(options) {
         return __specs[spec.id];
     }
 
-    self.jasmineStarted = function(summary) {
+    function getReportFilename(specName) {
+        var name = '';
+        if (self.fileNamePrefix) {
+            name += self.fileNamePrefix + self.fileNameSeparator;
+        }
+
+        name += self.fileName;
+
+        if (_.isUndefined(specName)) {
+            name += self.fileNameSeparator + specName;
+        }
+
+        if (self.fileNameSuffix) {
+            name += self.fileNameSeparator + self.fileNameSuffix;
+        }
+
+        if (self.fileNameDateSuffix) {
+            name += self.fileNameSeparator + getReportDate();
+        }
+
+        return name;
+    }
+
+    /**
+     * Remove passed specs but keep specs that failed on first run
+     * but passed on second.
+     * @param {object} suite - a suite object
+     */
+    function filterOutPassedSpecs(suite) {
+        var suiteName = getFullyQualifiedSuiteName(suite);
+
+        suite._specs = suite._specs.filter((spec) => {
+            return !isPassed(spec) || (flakedSuiteNames[suiteName] || []).indexOf(spec.id) > -1;
+        });
+
+        return suite;
+    }
+
+    /**
+     * Persist failed suite names to node local storage
+     */
+    function saveFlakedSuiteNames() {
+        if (_.isEmpty(Object.keys(flakedSuiteNames))) {
+            return;
+        }
+
+        var storedNames = loadFlakedSuiteNames();
+        namesToBeStored = Object.assign(storedNames, flakedSuiteNames);
+
+        storage.setItem(storageUID, JSON.stringify(namesToBeStored));
+    }
+
+    /**
+     * Retrieve flaked suite names from node local storage to determine if current
+     * run is a rerun.
+     */
+    function loadFlakedSuiteNames() {
+        var storedSuiteNames = storage.getItem(storageUID) || {};
+
+        if (_.isString(storedSuiteNames)) {
+            try {
+                return JSON.parse(storedSuiteNames);
+            } catch (error) {
+                log('Error retrieving flaked suite names', error);
+            }
+        }
+
+        return {};
+    }
+    
+    /**
+     * Check if a suite has failing specs.
+     * @param {object} suite - suite object
+     */
+    function isFlakeySuite(suite) {
+        return suite._failures > 0;
+    }
+
+    /**
+     * Check if a suite is a rerun (failed initially and is being run a second time)
+     * @param {object} suite - suite object
+     * @return {boolean}
+     */
+    function isFlakedSuiteRerun(suite) {
+        var suiteName = getFullyQualifiedSuiteName(suite);
+
+        if (flakedSuiteNames[suiteName] && flakedSuiteNames[suiteName].length > 0) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Append a flakey suite to displayed suites.
+     * @param {suite} suite - suite object
+     */
+    function appendFlakeySuite(suite) {
+        var suiteCopy = Object.assign({}, suite);
+        suiteCopy._suites = [];
+
+        // if it is suite's first run remove all passed specs and save failing spec ids.
+        if(!isFlakedSuiteRerun(suite)) {
+            let failedSpecIds = suiteCopy._specs
+                .filter((spec) => !isPassed(spec))
+                .map((spec) => spec.id);
+            flakedSuiteNames[getFullyQualifiedSuiteName(suite)] = failedSpecIds;
+        }
+
+        suiteCopy = filterOutPassedSpecs(suiteCopy);
+
+        flakes.push(suiteCopy);
+    }
+
+    self.jasmineStarted = function (summary) {
+        flakedSuiteNames = loadFlakedSuiteNames();
+
         totalSpecsDefined = summary && summary.totalSpecsDefined || NaN;
         exportObject.startTime = new Date();
         self.started = true;
@@ -117,8 +265,12 @@ function Jasmine2HTMLReporter(options) {
             // Delete previous screenshots
             rmdir(self.savePath);
         }
+        //Delete previous reports unless cleanDirectory is false
+        if (self.cleanDestination) {
+            rmdir(self.savePath);
+        }
     };
-    self.suiteStarted = function(suite) {
+    self.suiteStarted = function (suite) {
         suite = getSuite(suite);
         suite._startTime = new Date();
         suite._specs = [];
@@ -134,7 +286,7 @@ function Jasmine2HTMLReporter(options) {
         }
         currentSuite = suite;
     };
-    self.specStarted = function(spec) {
+    self.specStarted = function (spec) {
         if (!currentSuite) {
             // focused spec (fit) -- suiteStarted was never called
             self.suiteStarted(fakeFocusedSuite);
@@ -144,7 +296,8 @@ function Jasmine2HTMLReporter(options) {
         spec._suite = currentSuite;
         currentSuite._specs.push(spec);
     };
-    self.specDone = function(spec) {
+
+    self.specDone = function (spec) {
         spec = getSpec(spec);
         spec._endTime = new Date();
         if (isSkipped(spec)) { spec._suite._skipped++; }
@@ -161,47 +314,53 @@ function Jasmine2HTMLReporter(options) {
                 spec.screenshot = sanitizeFilename(spec.description) + '.png';
 
             browser.takeScreenshot().then(function (png) {
-                browser.getCapabilities().then(function (capabilities) {
-                    var screenshotPath;
+                var screenshotPath = path.join(
+                    self.savePath,
+                    self.screenshotsFolder,
+                    spec.screenshot
+                );
 
-
-                    //Folder structure and filename
-                    screenshotPath = path.join(self.savePath + self.screenshotsFolder, spec.screenshot);
-
-                    mkdirp(path.dirname(screenshotPath), function (err) {
-                        if (err) {
-                            throw new Error('Could not create directory for ' + screenshotPath);
-                        }
-                        writeScreenshot(png, screenshotPath);
-                    });
+                mkdirp(path.dirname(screenshotPath), function (err) {
+                    if (err) {
+                        throw new Error('Could not create directory for ' + screenshotPath);
+                    }
+                    writeScreenshot(png, screenshotPath);
                 });
             });
         }
-
-
     };
-    self.suiteDone = function(suite) {
+    self.suiteDone = function (suite) {
         suite = getSuite(suite);
+
         if (suite._parent === UNDEFINED) {
             // disabled suite (xdescribe) -- suiteStarted was never called
             self.suiteStarted(suite);
         }
         suite._endTime = new Date();
         currentSuite = suite._parent;
+
+        if (isFlakedSuiteRerun(suite) || isFlakeySuite(suite)) {
+            appendFlakeySuite(suite);
+        }
     };
-    self.jasmineDone = function() {
+
+    self.jasmineDone = function () {
         if (currentSuite) {
             // focused spec (fit) -- suiteDone was never called
             self.suiteDone(fakeFocusedSuite);
         }
+        // add suite names to storage for to be loaded in the next jasmine run.
+        saveFlakedSuiteNames();
+
+        var outputSuites = self.showFailuresOnly ? flakes : suites;
 
         var output = '';
-        for (var i = 0; i < suites.length; i++) {
-            output += self.getOrWriteNestedOutput(suites[i]);
+        for (var i = 0; i < outputSuites.length; i++) {
+            output += self.getOrWriteNestedOutput(outputSuites[i]);
         }
         // if we have anything to write here, write out the consolidated file
         if (output) {
-            wrapOutputAndWriteFile(self.filePrefix, output);
+            wrapOutputAndWriteFile(getReportFilename(), output);
         }
         //log("Specs skipped but not reported (entire suite skipped or targeted to specific specs)", totalSpecsDefined - totalSpecsExecuted + totalSpecsDisabled);
 
@@ -210,7 +369,7 @@ function Jasmine2HTMLReporter(options) {
         exportObject.endTime = new Date();
     };
 
-    self.getOrWriteNestedOutput = function(suite) {
+    self.getOrWriteNestedOutput = function (suite) {
         var output = suiteAsHtml(suite);
         for (var i = 0; i < suite._suites.length; i++) {
             output += self.getOrWriteNestedOutput(suite._suites[i]);
@@ -226,7 +385,7 @@ function Jasmine2HTMLReporter(options) {
 
     /******** Helper functions with closure access for simplicity ********/
     function generateFilename(suite) {
-        return self.filePrefix + getFullyQualifiedSuiteName(suite, true) + '.html';
+        return getReportFilename(getFullyQualifiedSuiteName(suite, true));
     }
 
     function getFullyQualifiedSuiteName(suite, isFilename) {
@@ -279,17 +438,17 @@ function Jasmine2HTMLReporter(options) {
             var spec = suite._specs[i];
             html += '<div class="spec">';
             html += specAsHtml(spec);
-                html += '<div class="resume">';
-                if (spec.screenshot !== UNDEFINED){
-                    html += '<a href="' + self.screenshotsFolder + spec.screenshot + '">';
-                    html += '<img src="' + self.screenshotsFolder + spec.screenshot + '" width="100" height="100" />';
-                    html += '</a>';
-                }
-                html += '<br />';
-                var num_tests= spec.failedExpectations.length + spec.passedExpectations.length;
-                var percentage = (spec.passedExpectations.length*100)/num_tests;
-                html += '<span>Tests passed: ' + parseDecimalRoundAndFixed(percentage,2) + '%</span><br /><progress max="100" value="' + Math.round(percentage) + '"></progress>';
-                html += '</div>';
+            html += '<div class="resume">';
+            if (spec.screenshot !== UNDEFINED) {
+                html += '<a href="' + self.screenshotsFolder + spec.screenshot + '">';
+                html += '<img src="' + self.screenshotsFolder + spec.screenshot + '" width="100" height="100" />';
+                html += '</a>';
+            }
+            html += '<br />';
+            var num_tests = spec.failedExpectations.length + spec.passedExpectations.length;
+            var percentage = (spec.passedExpectations.length * 100) / num_tests;
+            html += '<span>Tests passed: ' + parseDecimalRoundAndFixed(percentage, 2) + '%</span><br /><progress max="100" value="' + Math.round(percentage) + '"></progress>';
+            html += '</div>';
             html += '</div>';
         }
         html += '\n </article>';
@@ -300,33 +459,39 @@ function Jasmine2HTMLReporter(options) {
         var html = '<div class="description">';
         html += '<h3>' + escapeInvalidHtmlChars(spec.description) + ' - ' + elapsed(spec._startTime, spec._endTime) + 's</h3>';
 
-        if (spec.failedExpectations.length > 0 || spec.passedExpectations.length > 0 ){
+        if (spec.failedExpectations.length > 0 || spec.passedExpectations.length > 0) {
             html += '<ul>';
-            _.each(spec.failedExpectations, function(expectation){
+            _.each(spec.failedExpectations, function (expectation) {
                 html += '<li>';
                 html += expectation.message + '<span style="padding:0 1em;color:red;">&#10007;</span>';
                 html += '</li>';
             });
-            _.each(spec.passedExpectations, function(expectation){
-                html += '<li>';
-                html += expectation.message + '<span style="padding:0 1em;color:green;">&#10003;</span>';
-                html += '</li>';
-            });
+            if (self.showPassed === true) {
+                _.each(spec.passedExpectations, function (expectation) {
+                    html += '<li>';
+                    html += expectation.message + '<span style="padding:0 1em;color:green;">&#10003;</span>';
+                    html += '</li>';
+                });
+            }
             html += '</ul></div>';
+        }
+        else {
+            html += '<span style="padding:0 1em;color:orange;">***Skipped***</span>';
+            html += '</div>';
         }
         return html;
     }
 
-    self.writeFile = function(filename, text) {
+    self.writeFile = function (filename, text) {
         var errors = [];
         var path = self.savePath;
 
-        function appendwrite(path, filename, text){
+        function appendwrite(path, filename, text) {
             var fs = require("fs");
             var nodejs_path = require("path");
             require("mkdirp").sync(path); // make sure the path exists
             var filepath = nodejs_path.join(path, filename);
-            fs.appendFileSync(filepath,text);
+            fs.appendFileSync(filepath, text);
             return;
         }
 
@@ -367,9 +532,10 @@ function Jasmine2HTMLReporter(options) {
     };
 
     // To remove complexity and be more DRY about the silly preamble and <testsuites> element
-    var prefix = '<!DOCTYPE html><html><head lang=en><meta charset=UTF-8><title></title><style>body{font-family:"open_sans",sans-serif}.suite{width:100%;overflow:auto}.suite .stats{margin:0;width:90%;padding:0}.suite .stats li{display:inline;list-style-type:none;padding-right:20px}.suite h2{margin:0}.suite header{margin:0;padding:5px 0 5px 5px;background:#003d57;color:white}.spec{width:100%;overflow:auto;border-bottom:1px solid #e5e5e5}.spec:hover{background:#e8f3fb}.spec h3{margin:5px 0}.spec .description{margin:1% 2%;width:65%;float:left}.spec .resume{width:29%;margin:1%;float:left;text-align:center}</style></head>';
-        prefix += '<body><section>';
+    var prefix = '<!DOCTYPE html><html><head lang=en><meta charset=UTF-8><title>Test Report -  ' + getReportDate() + '</title><style>body{font-family:"open_sans",sans-serif}.suite{width:100%;overflow:auto}.suite .stats{margin:0;width:90%;padding:0}.suite .stats li{display:inline;list-style-type:none;padding-right:20px}.suite h2{margin:0}.suite header{margin:0;padding:5px 0 5px 5px;background:#003d57;color:white}.spec{width:100%;overflow:auto;border-bottom:1px solid #e5e5e5}.spec:hover{background:#e8f3fb}.spec h3{margin:5px 0}.spec .description{margin:1% 2%;width:65%;float:left}.spec .resume{width:29%;margin:1%;float:left;text-align:center}</style></head>';
+    prefix += '<body><section>';
     var suffix = '\n</section></body></html>';
+
     function wrapOutputAndWriteFile(filename, text) {
         if (filename.substr(-5) !== '.html') { filename += '.html'; }
         self.writeFile(filename, (prefix + text + suffix));
