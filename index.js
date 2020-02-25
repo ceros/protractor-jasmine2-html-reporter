@@ -148,7 +148,7 @@ function Jasmine2HTMLReporter(options) {
 
         name += self.fileName;
 
-        if (_.isUndefined(specName)) {
+        if (!_.isUndefined(specName)) {
             name += self.fileNameSeparator + specName;
         }
 
