@@ -108,8 +108,8 @@ function Jasmine2HTMLReporter(options) {
     self.fileNamePrefix = options.fileNamePrefix === UNDEFINED ? '' : options.fileNamePrefix;
     self.fileNameSuffix = options.fileNameSuffix === UNDEFINED ? '' : options.fileNameSuffix;
     self.fileNameDateSuffix = options.fileNameDateSuffix === UNDEFINED ? false : options.fileNameDateSuffix;
-    self.fileName = options.fileName === UNDEFINED ? 'htmlReport' : options.fileName;
-    self.cleanDestination = options.cleanDestination === UNDEFINED ? true : options.cleanDestination;
+    self.fileName = options.fileName === UNDEFINED ? (options.filePrefix || 'htmlReport') : options.fileName;
+    self.cleanDestination = options.cleanDestination === UNDEFINED ? false : options.cleanDestination;
     self.showPassed = options.showPassed === UNDEFINED ? true : options.showPassed;
     self.showFailuresOnly = options.showFailuresOnly === UNDEFINED ? false : options.showFailuresOnly;
 
