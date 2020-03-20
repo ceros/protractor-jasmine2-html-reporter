@@ -5,6 +5,7 @@ const path = require('path');
 const hat = require('hat');
 const fs = require('fs');
 const cycle = require('cycle');
+const BaseReporter = require('./BaseReporter');
 
 const fakeFocusedSuite = {
     id: 'focused',
@@ -29,27 +30,66 @@ function isDisabled(obj) { return obj.status === 'disabled'; }
 
 let self;
 
-class JsonReporter {
+class JsonReporter extends BaseReporter {
     constructor(options = {}) {
+        super();
+
         self = this;
 
         self.started = false;
         self.finished = false;
 
         self.savePath = options.savePath || '';
-        self.fileName = _.isUndefined(options.fileName) ? 'htmlReport' : options.fileName;
+        self.fileName = _.isUndefined(options.fileName) ? 'jsonReport' : options.fileName;
         self.consolidate = _.isUndefined(options.consolidate) ? true : options.consolidate;
         self.takeScreenshots = _.isUndefined(options.takeScreenshots) ? true : options.takeScreenShots;
         self.takeScreenshotsOnlyOnFailures = _.isUndefined(options.takeScreenshotsOnlyOnFailures) ? false : options.takeScreenshotsOnlyOnFailures;
         self.screenshotsFolder = (options.screenshotsFolder || 'screenshots').replace(/^\//, '') + '/';
         self.useDotNotation = _.isUndefined(options.useDotNotation) ? true : options.useDotNotation;
 
-        self.suites = [];
         self.currentSuite = null;
+
+        self.results = {
+            'runs': {
+
+            }
+        };
+        
+        self.runNumber = 1;
+        self.isNewRun = false;
     }
 
-    jasmineStarted(summary) {
+    appendSuite(suite) {
+        return self.results.runs[self.runNumber].suites.push(suite);
+    }
+
+    getSuites(results = self.results) {
+        return results.runs[self.runNumber].suites;
+    }
+
+    jasmineStarted() {
         self.started = true;
+
+        if (self.isNewRun) {
+            const results = self.readJsonFile(self.getReportFileName('json'));
+            
+            if (!results) {
+                self.runNumber = 1;
+            } else {
+                const highestNumberedRun = Object.keys(results.runs).reduce((prev, curr) => {
+                    return curr > prev ? curr : prev;
+                });
+                self.runNumber = parseInt(highestNumberedRun) + 1;
+            }
+
+            self.isNewRun = false;
+        }
+
+        if (!(self.results.runs[self.runNumber])) {
+            self.results.runs[self.runNumber] = {
+                'suites': []
+            }
+        }
     }
 
     suiteStarted(suite) {
@@ -63,7 +103,7 @@ class JsonReporter {
         suite._parent = self.currentSuite;
 
         if (!self.currentSuite) {
-            self.suites.push(suite);
+            self.appendSuite(suite);
         } else {
             self.currentSuite._suites.push(suite);
         }
@@ -86,9 +126,9 @@ class JsonReporter {
         let spec = getSpec(jasmineSpec);
         spec._endTime = new Date();
 
-        if (isSkipped(spec)) { spec._suite._skipped++; };
-        if (isDisabled(spec)) { spec._suite._disabled++; };
-        if (isFailed(spec)) { spec._suite._failures++; };
+        if (isSkipped(spec)) { spec._suite._skipped++; }
+        if (isDisabled(spec)) { spec._suite._disabled++; }
+        if (isFailed(spec)) { spec._suite._failures++; }
 
         const shouldTakeScreenShot = (self.takeScreenShots && !self.takeScreenshotsOnlyOnFailures)
             || (self.takeScreenShots &&  self.takeScreenshotsOnlyOnFailures && isFailed(spec));
@@ -115,28 +155,50 @@ class JsonReporter {
             self.suiteDone(fakeFocusedSuite);
         }
 
-        self.writeOrAppendJsonFile(self.suites, self.getReportFileName('json'));
+        self.writeOrAppendJsonFile(self.results, self.getReportFileName('json'));
 
         self.finished = true;
     }
 
-    writeOrAppendJsonFile(suites, fileName) {
-        mkdirp.sync(self.savePath);
+    readJsonFile(fileName = self.fileName) {
+        const filePath = path.join(self.savePath, fileName);
+        
+        try {
+            return jsonfile.readFileSync(filePath);
+        } catch (error) {
+            return null;
+        }
+    }
 
-        const content = cycle.decycle(suites);
+    writeOrAppendJsonFile(results, fileName) {
+        let savedResults = self.readJsonFile(fileName);
+
+        // recursively create the folder if it doesnt exist.
+        mkdirp.sync(self.savePath);
+        // get rid of circular references.
+        results = cycle.decycle(results);
         const filePath = path.join(self.savePath, fileName);
 
         try {
-            return jsonfile.readFile(filePath, (err, obj) => {
-                if (err) {
-                    return jsonfile.writeFile(filePath, content);
-                }
+            if (!savedResults) {
+                return jsonfile.writeFileSync(filePath, results);
+            }
+            
+            if (savedResults.runs[self.runNumber]) {
+                // append suites to already saved suites.
+                const savedSuites = self.getSuites(savedResults);
+                const newSuites = self.getSuites(results);
+                savedResults.runs[self.runNumber].suites = savedSuites.concat(newSuites);
+            } else {
+                // assign to run if run doesnt exist.
+                savedResults.runs[self.runNumber] = results.runs[self.runNumber];
+            }
 
-                let json = obj.concat(content);
-                return jsonfile.writeFile(filePath, json);
-            });
+            return jsonfile.writeFileSync(filePath, savedResults);
         } catch (e) {
-            console.log('Warning: writing json report failed for ' + path + fileName);
+            console.error(
+                'Warning: writing json report failed for ' + path + fileName + 'with error' + error
+            );
         }
     }
 
@@ -152,23 +214,6 @@ class JsonReporter {
         }
 
         return suiteName;
-    }
-
-    getReportFileName(format = 'html') {
-        let name = self.fileName;
-
-        const fileExt = name.slice(-5);
-        if (fileExt === '.html' || fileExt === '.json') {
-            return name;
-        }
-
-        if (format === 'html') {
-            name += '.html';
-        } else if (format === 'json') {
-            name += '.json';
-        }
-
-        return name;
     }
 
     takeScreenshot(spec) {
