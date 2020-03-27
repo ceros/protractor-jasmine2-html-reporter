@@ -122,7 +122,7 @@ This option, if false, will not delete the reports or screenshots before each te
    cleanDestination: false
 }));</code></pre>
 
-Default is <code>true</code>
+Default is <code>false</code>
 
 ### showPassed (optional)
 
