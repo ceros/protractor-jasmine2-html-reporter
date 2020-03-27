@@ -370,20 +370,14 @@ function Jasmine2HTMLReporter(options) {
     };
 
     self.afterLaunch = function(callback) {
-        var successPrefix = `<!DOCTYPE html><html><head lang=en><meta charset=UTF-8><title>Test Report -  ' + getReportDate() + '</title><style>body{font-family:"open_sans",sans-serif}.container{margin:100px auto;padding:0;position:relative;width:200px;height:auto;}.checkmark-holder{padding:0;margin:0;height:200px;width: 200px;}.checkmark{padding: 0;margin: 0;height: 200px;width: 200px;}.message-holder {padding:0;margin:20px 0 0 0;width: 100%;height:auto;clear:both;} .message {text-align:center;display:block;font-size:large;}</style></head><body>`
-        var successOutput = `
-            <div class="container">
-                <div class="checkmark-holder"><img class="checkmark" src="${path.join(__dirname, 'static/checkmark.png')}"/></div>
-                <div class="message-holder"><span class="message">Congratulations, All your tests passed...!!!</span></div>
-            </div>`;
-        var successSuffix = '</body></html>';
-
+        // write success report. if all test pass and showFailuresOnly options is true,
+        // file wont be created.
         if (self.fileName.substr(-5) !== '.html') { self.fileName += '.html'; }
         var filePath = path.join(self.savePath, self.fileName);
-        
         if (!fs.existsSync(filePath) && self.showFailuresOnly) {
-            self.writeFile(self.fileName, (successPrefix + successOutput + successSuffix));
+            self.writeSuccessOuput(self.fileName);
         }
+
         callback();
     }
 
@@ -400,6 +394,23 @@ function Jasmine2HTMLReporter(options) {
             return '';
         }
     };
+
+    self.writeSuccessOuput = function (fileName) {        
+        var successOutput = getSuccessOutput();
+        self.writeFile(fileName, successOutput);
+    }
+
+    function getSuccessOutput() {
+        var successCss = fs.readFileSync(path.join(__dirname, 'static/success.css'));
+        var successPrefix = '<!DOCTYPE html><html><head lang=en><meta charset=UTF-8><title>Test Report -  ' + getReportDate() + '</title>';
+        successPrefix += ('<style>' + successCss + '</style></head><body>');
+
+        var successBody = fs.readFileSync(path.join(__dirname, 'static/success.html'));
+        
+        var successSuffix = '</body></html>';
+
+        return (successPrefix + successBody + successSuffix);
+    }
 
     /******** Helper functions with closure access for simplicity ********/
     function generateFilename(suite) {
