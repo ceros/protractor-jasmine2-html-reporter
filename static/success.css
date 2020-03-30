@@ -1,0 +1,63 @@
+body {
+    font-family: 'open_sans', sans-serif;
+}
+
+.container {
+    margin: 100px auto;
+    padding: 0;
+    position: relative;
+    width: 200px;
+    height: auto;
+}
+
+.checkmark-holder {
+    position: relative;
+    padding: 0;
+    margin: 0;
+    height: 200px;
+    width: 200px;
+    transform: rotate(-45deg);
+}
+
+.checkmark-circle {
+    position: absolute;
+    width: 200px;
+    height: 200px;
+    border: 10px solid green;
+    border-radius: 50%;
+    box-sizing: border-box;
+}
+
+.checkmark-stem {
+    position: absolute;
+    width: 10px;
+    height: 50px;
+    margin-top: 60px;
+    margin-left: 60px;
+    background-color: green;
+    border-radius: 5px 5px 0 0;
+}
+
+.checkmark-kick {
+    position: absolute;
+    margin-left: 60px;
+    margin-top: 110px;
+    height: 10px;
+    width: 100px;
+    background-color: green;
+    border-radius: 0 5px 5px 7px;
+}
+
+.message-holder {
+    padding: 0;
+    margin: 20px 0 0 0;
+    width: 100%;
+    height: auto;
+    clear: both;
+}
+
+.message {
+    text-align: center;
+    display: block;
+    font-size: large;
+}

@@ -369,6 +369,18 @@ function Jasmine2HTMLReporter(options) {
         exportObject.endTime = new Date();
     };
 
+    self.afterLaunch = function(callback) {
+        // if showFailuresOnly is true and all tests pass, then write a success
+        // html report
+        if (self.fileName.substr(-5) !== '.html') { self.fileName += '.html'; }
+        var filePath = path.join(self.savePath, self.fileName);
+        if (!fs.existsSync(filePath) && self.showFailuresOnly) {
+            self.writeSuccessOuput(self.fileName);
+        }
+
+        callback();
+    }
+
     self.getOrWriteNestedOutput = function (suite) {
         var output = suiteAsHtml(suite);
         for (var i = 0; i < suite._suites.length; i++) {
@@ -382,6 +394,23 @@ function Jasmine2HTMLReporter(options) {
             return '';
         }
     };
+
+    self.writeSuccessOuput = function (fileName) {        
+        var successOutput = getSuccessOutput();
+        self.writeFile(fileName, successOutput);
+    }
+
+    function getSuccessOutput() {
+        var successCss = fs.readFileSync(path.join(__dirname, 'static/success.css'));
+        var successPrefix = '<!DOCTYPE html><html><head lang=en><meta charset=UTF-8><title>Test Report -  ' + getReportDate() + '</title>';
+        successPrefix += ('<style>' + successCss + '</style></head><body>');
+
+        var successBody = fs.readFileSync(path.join(__dirname, 'static/success.html'));
+        
+        var successSuffix = '</body></html>';
+
+        return (successPrefix + successBody + successSuffix);
+    }
 
     /******** Helper functions with closure access for simplicity ********/
     function generateFilename(suite) {
