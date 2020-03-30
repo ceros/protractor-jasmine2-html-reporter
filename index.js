@@ -370,8 +370,8 @@ function Jasmine2HTMLReporter(options) {
     };
 
     self.afterLaunch = function(callback) {
-        // write success report. if all test pass and showFailuresOnly options is true,
-        // file wont be created.
+        // if showFailuresOnly is true and all tests pass, then write a success
+        // html report
         if (self.fileName.substr(-5) !== '.html') { self.fileName += '.html'; }
         var filePath = path.join(self.savePath, self.fileName);
         if (!fs.existsSync(filePath) && self.showFailuresOnly) {
