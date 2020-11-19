@@ -491,9 +491,17 @@ function Jasmine2HTMLReporter(options) {
         if (spec.failedExpectations.length > 0 || spec.passedExpectations.length > 0) {
             html += '<ul>';
             _.each(spec.failedExpectations, function (expectation) {
+                // captures any string starting with spec and endoing with .js
+                const regex = /(specs\S*.js)/g;
+                const found = expectation.stack.match(regex);
+                let uniqueFound = [...new Set(found)];
                 html += '<li>';
                 html += expectation.message + '<span style="padding:0 1em;color:red;">&#10007;</span>';
                 html += '</li>';
+                html += '<div class="specfile">';
+                html += '<h4>Specfile:</h4>';
+                html += '<p>'+ uniqueFound.join('</br>')+'</p>'
+                html += '</div>';
             });
             if (self.showPassed === true) {
                 _.each(spec.passedExpectations, function (expectation) {
