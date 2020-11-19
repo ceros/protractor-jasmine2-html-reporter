@@ -1,6 +1,6 @@
 {
   "name": "protractor-jasmine2-html-reporter",
-  "version": "0.0.7",
+  "version": "0.0.8",
   "description": "HTML reporter for Jasmine and Protractor. It will generate beautiful and useful report for your web apps.",
   "main": "index.js",
   "scripts": {
